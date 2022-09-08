@@ -205,7 +205,7 @@ class Wav2VecCtc(BaseFairseqModel):
     @classmethod
     def build_model(cls, cfg: Wav2Vec2CtcConfig, task: FairseqTask):
         """Build a new model instance."""
-        w2v_encoder = Wav2VecEncoder(cfg, len(task.target_dictionary))
+        w2v_encoder = Wav2VecEncoder(cfg, len(task.load_target_dictionary()))
         return cls(cfg, w2v_encoder)
 
     def get_logits(self, net_output, normalize=False):
@@ -244,6 +244,17 @@ class Wav2VecCtc(BaseFairseqModel):
     def forward(self, **kwargs):
         x = self.w2v_encoder(**kwargs)
         return x
+
+    def remove_pretraining_modules(self, last_layer=None):
+        self.quantizer = None
+        self.project_q = None
+        self.target_glu = None
+        self.final_proj = None
+
+        if last_layer is not None:
+            self.encoder.layers = nn.ModuleList(
+                l for i, l in enumerate(self.encoder.layers) if i <= last_layer
+            )
 
 
 @dataclass
@@ -374,6 +385,7 @@ class Wav2VecEncoder(FairseqEncoder):
         }
 
         if cfg.w2v_args is None:
+
             state = checkpoint_utils.load_checkpoint_to_cpu(cfg.w2v_path, arg_overrides)
             w2v_args = state.get("cfg", None)
             if w2v_args is None:
@@ -404,8 +416,14 @@ class Wav2VecEncoder(FairseqEncoder):
 
         w2v_args.task.data = cfg.data
         task = tasks.setup_task(w2v_args.task)
+        try:
+            if w2v_args["_name"] == "audio_pretraining":
+                w2v_args.model.labels = "ltr"
+        except:
+            pass
         model = task.build_model(w2v_args.model, from_checkpoint=True)
 
+        
         model.remove_pretraining_modules()
 
         if state is not None and not cfg.no_pretrained_weights:
@@ -463,6 +481,8 @@ class Wav2VecEncoder(FairseqEncoder):
         else:
             if "_ema" in state["model"]:
                 del state["model"]["_ema"]
+
+            print(cfg["_name"])
             model.load_state_dict(state["model"], strict=True)
 
     def set_num_updates(self, num_updates):
@@ -482,8 +502,14 @@ class Wav2VecEncoder(FairseqEncoder):
 
         with torch.no_grad() if not ft else contextlib.ExitStack():
             res = self.w2v_model.extract_features(**w2v_args)
-
-            x = res["x"]
+            try:
+                x = res['x']
+            except:
+                return {
+                    "encoder_out": res["encoder_out"],  # T x B x C
+                    "padding_mask": res["padding_mask"],  # B x T,
+                    "layer_results": res["layer_results"],
+                }
             padding_mask = res["padding_mask"]
 
             # B x T x C -> T x B x C

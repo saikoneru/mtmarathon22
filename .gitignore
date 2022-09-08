@@ -117,6 +117,8 @@ ENV/
 
 # data
 data-bin/
+Libri_Manifest/
+LibriSpeech/
 
 # reranking
 /examples/reranking/rerank_data

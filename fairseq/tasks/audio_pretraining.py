@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 from omegaconf import MISSING, II, OmegaConf
 
+from fairseq.data import AddTargetDataset, Dictionary, encoders
 from fairseq.data import BinarizedAudioDataset, FileAudioDataset
 from fairseq.dataclass import FairseqDataclass, ChoiceEnum
 from fairseq.data.text_compressor import TextCompressionLevel
@@ -112,6 +113,7 @@ class AudioPretrainingTask(FairseqTask):
 
     cfg: AudioPretrainingConfig
 
+    
     @classmethod
     def setup_task(cls, cfg: AudioPretrainingConfig, **kwargs):
         """Setup the task (e.g., load dictionaries).
@@ -133,6 +135,12 @@ class AudioPretrainingTask(FairseqTask):
         else:
             return {}
 
+    def load_target_dictionary(self):
+        if self.cfg.labels:
+            dict_path = os.path.join(self.cfg.data, f"dict.{self.cfg.labels}.txt")
+            return Dictionary.load(dict_path)
+        return None
+    
     def load_dataset(self, split: str, task_cfg: FairseqDataclass = None, **kwargs):
         data_path = self.cfg.data
         task_cfg = task_cfg or self.cfg
@@ -187,7 +195,8 @@ class AudioPretrainingTask(FairseqTask):
 
     @property
     def target_dictionary(self):
-        return None
+        return self.state.target_dictionary
+        #return None
 
     def max_positions(self):
         """Maximum input length supported by the encoder."""

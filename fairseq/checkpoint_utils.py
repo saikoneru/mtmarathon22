@@ -313,7 +313,6 @@ def load_checkpoint_to_cpu(path, arg_overrides=None, load_on_all_ranks=False):
 
     with open(local_path, "rb") as f:
         state = torch.load(f, map_location=torch.device("cpu"))
-
     if "args" in state and state["args"] is not None and arg_overrides is not None:
         args = state["args"]
         for arg_name, arg_val in arg_overrides.items():
